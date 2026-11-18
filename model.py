@@ -16,6 +16,9 @@ reviewed against the full paper before training. No softmax is applied: PyTorch'
 CrossEntropyLoss consumes logits and includes log-softmax internally.
 """
 
+from pathlib import Path
+
+import torch
 from torch import Tensor, nn
 
 
@@ -48,3 +51,20 @@ class ASLAlphabetCNN(nn.Module):
         if x.ndim != 4 or x.shape[1:] != (1, 400, 400):
             raise ValueError(f"Expected (batch, 1, 400, 400), got {tuple(x.shape)}")
         return self.classifier(self.features(x))
+
+
+def load_best_model(checkpoint_path: str | Path, map_location: str | torch.device = "cpu") -> tuple[ASLAlphabetCNN, dict]:
+    """Load a saved best_model.pt from any local path, including a Drive sync folder.
+
+    Returns the model in evaluation mode and its checkpoint metadata. The caller
+    should apply the same grayscale, 400x400, [0, 1] preprocessing used in training.
+    """
+    path = Path(checkpoint_path).expanduser()
+    checkpoint = torch.load(path, map_location=map_location, weights_only=True)
+    class_names = checkpoint.get("class_names")
+    if not class_names:
+        raise ValueError(f"Checkpoint is missing class_names metadata: {path}")
+    model = ASLAlphabetCNN(num_classes=len(class_names))
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+    return model, checkpoint
